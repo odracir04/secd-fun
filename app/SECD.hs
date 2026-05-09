@@ -26,7 +26,6 @@ data Instr = LD Int
 type Ident = String
             
 instance Show Value where
-    show :: Value -> String
     show (Int x) = show x
     show (Addr a) = "SECD Address: " ++ show a
 
@@ -53,7 +52,7 @@ next :: Store -> Addr
 next sto = size sto + 1
 
 compile :: Term -> Symtable -> Code
-compile (Var x) sym = case elemIndex x sym of Just id -> [LD id]
+compile (Var x) sym = case elemIndex x sym of Just var -> [LD var]
                                               Nothing -> error ("Undeclared variable: " ++ show x)
 compile (Lambda x c) sym = [LDF (compile c sym' ++ [RTN])]
                            where sym' = extend sym x
@@ -76,8 +75,8 @@ compile (Not e) sym = compile e sym ++ [NOT]
 compile t _ = error ("Invalid term: " ++ show t)
 
 step :: SECD -> SECD
-step (s, e, LD x:c, d, m) = (id:s, e, c, d, m)
-                                where id = e !! x
+step (s, e, LD x:c, d, m) = (var:s, e, c, d, m)
+                                where var = e !! x
 step (s, e, LDC x:c, d, m) = (Int x:s, e, c, d, m)
 step (s, e, LDF c':c, d, m) = (Addr a:s, e, c, d, m')
                                 where a = next m
@@ -88,11 +87,11 @@ step (s, e, LDRF c':c, d, m) = (Addr a:s, e, c, d, m')
 step (v:(Addr a):s, e, AP:c, d, m) 
     = case Data.Map.lookup a m of Just (c', e') -> ([], v:e', c', (s,e,c):d, m)
                                   Nothing -> error ("Function does not exist at address " ++ show a)
-step (v:s, e, RTN:c, (s', e', c'):d, m) = (v:s', e', c', d, m)
+step (v:_, _, RTN:_, (s', e', c'):d, m) = (v:s', e', c', d, m)
 step ((Int b):s, e, SEL c1 c2:c, d, m) = if b == 0
                                          then (s, e, c1, ([], [], c):d, m)
                                          else (s, e, c2, ([], [], c):d, m)
-step (s, e, JOIN:c, (_, _, c'):d, m) = (s, e, c', d, m)
+step (s, e, JOIN:_, (_, _, c'):d, m) = (s, e, c', d, m)
 step ((Int v1):(Int v2):s, e, ADD:c, d, m) = (Int(v1+v2):s, e, c, d, m)
 step ((Int v1):(Int v2):s, e, SUB:c, d, m) = (Int(v2-v1):s, e, c, d, m)
 step ((Int v1):(Int v2):s, e, MUL:c, d, m) = (Int(v1*v2):s, e, c, d, m)
@@ -110,7 +109,7 @@ step (s, e, HALT:c, d, m) = (s, e, c, d, m)
 step (s, _, c, _, _) = error ("Invalid execution: \nStack: " ++ show s ++ "\nCode: " ++ show c)
 
 execute :: SECD -> Value
-execute (v:s, _, [], _, _) = v
+execute (v:_, _, [], _, _) = v
 execute secd = execute (step secd)
 
 run :: Term -> Value
